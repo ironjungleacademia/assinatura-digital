@@ -187,14 +187,14 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const BASE_URL_ASSINATURA = "https://ironjungleacademia.github.io/assinatura-digital/assinar.html";
 // ============================================
 
-let supabase = null;
+let supabaseClient = null;
 const configWarning = document.getElementById('config-warning');
 
 if (SUPABASE_URL.includes('COLE_AQUI') || SUPABASE_ANON_KEY.includes('COLE_AQUI')) {
   configWarning.style.display = 'block';
   configWarning.innerHTML = '⚠️ Configure SUPABASE_URL e SUPABASE_ANON_KEY no topo do arquivo admin.html antes de usar. Veja o README.md.';
 } else {
-  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   carregarDocumentos();
 }
 
@@ -207,7 +207,7 @@ function mostrarStatus(texto, tipo) {
 }
 
 btnEnviar.addEventListener('click', async () => {
-  if (!supabase) return;
+  if (!supabaseClient) return;
 
   const nome = document.getElementById('aluno-nome').value.trim();
   const fileInput = document.getElementById('pdf-file');
@@ -224,13 +224,13 @@ btnEnviar.addEventListener('click', async () => {
     const docId = crypto.randomUUID();
     const caminhoArquivo = `originais/${docId}.pdf`;
 
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabaseClient.storage
       .from('documentos')
       .upload(caminhoArquivo, file, { contentType: 'application/pdf' });
 
     if (uploadError) throw uploadError;
 
-    const { error: insertError } = await supabase
+    const { error: insertError } = await supabaseClient
       .from('documentos')
       .insert({
         id: docId,
@@ -255,7 +255,7 @@ btnEnviar.addEventListener('click', async () => {
 
 async function carregarDocumentos() {
   const lista = document.getElementById('lista-documentos');
-  const { data, error } = await supabase
+  const { data, error } = await supabaseClient
     .from('documentos')
     .select('*')
     .order('created_at', { ascending: false });
@@ -300,7 +300,7 @@ async function copiarLink(link) {
 }
 
 async function baixarAssinado(path) {
-  const { data, error } = await supabase.storage.from('documentos').download(path);
+  const { data, error } = await supabaseClient.storage.from('documentos').download(path);
   if (error) { alert('Erro ao baixar: ' + error.message); return; }
   const url = URL.createObjectURL(data);
   const a = document.createElement('a');
