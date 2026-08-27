@@ -220,8 +220,10 @@
     display:flex;
     align-items:center;
     gap:6px;
-    cursor:pointer;
+    user-select:none;
+    touch-action:none;
   }
+  .campo-chip span:first-child{cursor:move;}
   .campo-chip .remover-campo{
     color:#a33;
     font-weight:700;
@@ -515,16 +517,60 @@ function renderizarChipsCampos() {
       chip.style.left = campo.xCanvas + 'px';
       chip.style.top = campo.yCanvas + 'px';
       chip.innerHTML = `<span>${escapeHtml(campo.texto)}</span><span class="remover-campo">×</span>`;
-      chip.querySelector('span:first-child').addEventListener('click', (e) => {
-        e.stopPropagation();
-        abrirInputCampo(campo.xCanvas, campo.yCanvas, campo);
-      });
+
       chip.querySelector('.remover-campo').addEventListener('click', (e) => {
         e.stopPropagation();
         camposPdf = camposPdf.filter(c => c !== campo);
         renderizarChipsCampos();
         renderizarListaCampos();
       });
+
+      const textoSpan = chip.querySelector('span:first-child');
+      let arrastando = false;
+      let moveu = false;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      textoSpan.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        arrastando = true;
+        moveu = false;
+        offsetX = e.clientX;
+        offsetY = e.clientY;
+        textoSpan.setPointerCapture(e.pointerId);
+      });
+
+      textoSpan.addEventListener('pointermove', (e) => {
+        if (!arrastando) return;
+        const dx = e.clientX - offsetX;
+        const dy = e.clientY - offsetY;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moveu = true;
+        if (!moveu) return;
+
+        const wrapperRect = wrapper.getBoundingClientRect();
+        let novoX = e.clientX - wrapperRect.left;
+        let novoY = e.clientY - wrapperRect.top;
+        novoX = Math.max(0, Math.min(novoX, wrapperRect.width));
+        novoY = Math.max(0, Math.min(novoY, wrapperRect.height));
+
+        campo.xCanvas = novoX;
+        campo.yCanvas = novoY;
+        chip.style.left = novoX + 'px';
+        chip.style.top = novoY + 'px';
+      });
+
+      textoSpan.addEventListener('pointerup', (e) => {
+        arrastando = false;
+        textoSpan.releasePointerCapture(e.pointerId);
+
+        if (moveu) {
+          campo.pdfX = campo.xCanvas / editScale;
+          campo.pdfY = editPageHeightUnscaled - (campo.yCanvas / editScale);
+        } else {
+          abrirInputCampo(campo.xCanvas, campo.yCanvas, campo);
+        }
+      });
+
       wrapper.appendChild(chip);
     });
 }
