@@ -207,6 +207,31 @@ if (SUPABASE_URL.includes('COLE_AQUI') || SUPABASE_ANON_KEY.includes('COLE_AQUI'
 const btnEnviar = document.getElementById('btn-enviar');
 const statusMsg = document.getElementById('status-msg');
 
+function mascararCpf(valor) {
+  return valor
+    .replace(/\D/g, '')
+    .slice(0, 11)
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+}
+
+function mascararData(valor) {
+  return valor
+    .replace(/\D/g, '')
+    .slice(0, 8)
+    .replace(/(\d{2})(\d)/, '$1/$2')
+    .replace(/(\d{2})(\d{1,4})$/, '$1/$2');
+}
+
+document.getElementById('aluno-cpf').addEventListener('input', (e) => {
+  e.target.value = mascararCpf(e.target.value);
+});
+
+document.getElementById('aluno-nascimento').addEventListener('input', (e) => {
+  e.target.value = mascararData(e.target.value);
+});
+
 function mostrarStatus(texto, tipo) {
   statusMsg.textContent = texto;
   statusMsg.className = tipo;

@@ -198,6 +198,23 @@ let currentPage = 1;
 let totalPages = 1;
 let signaturePad = null;
 
+function mascararCpf(valor) {
+  return valor
+    .replace(/\D/g, '')
+    .slice(0, 11)
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+}
+
+function mascararData(valor) {
+  return valor
+    .replace(/\D/g, '')
+    .slice(0, 8)
+    .replace(/(\d{2})(\d)/, '$1/$2')
+    .replace(/(\d{2})(\d{1,4})$/, '$1/$2');
+}
+
 init();
 
 async function init() {
@@ -244,6 +261,14 @@ function renderVerificacao(doc) {
       <div id="status-msg"></div>
     </div>
   `;
+
+  document.getElementById('verif-cpf').addEventListener('input', (e) => {
+    e.target.value = mascararCpf(e.target.value);
+  });
+
+  document.getElementById('verif-nascimento').addEventListener('input', (e) => {
+    e.target.value = mascararData(e.target.value);
+  });
 
   document.getElementById('btn-verificar').addEventListener('click', async () => {
     const cpfDigitado = document.getElementById('verif-cpf').value.replace(/\D/g, '');
