@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assinatura de Termo — Iron Jungle</title>
+<style>
+  :root{
+    --bg:#14161a;
+    --panel:#1c1f24;
+    --panel-2:#22262c;
+    --line:#2c3038;
+    --text:#eef0f2;
+    --muted:#8a919c;
+    --accent:#c7ff3f;
+    --accent-dim:#8fb92e;
+    --ok:#3fdc8f;
+    --danger:#ff5c5c;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Segoe UI',Roboto,-apple-system,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+  }
+  header{
+    padding:22px 20px;
+    border-bottom:1px solid var(--line);
+    text-align:center;
+  }
+  header h1{
+    font-size:17px;
+    margin:0 0 4px;
+    text-transform:uppercase;
+    letter-spacing:0.03em;
+  }
+  header h1 span{color:var(--accent);}
+  header p{margin:0;color:var(--muted);font-size:13px;}
+
+  main{max-width:640px;margin:0 auto;padding:20px 16px 60px;}
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:18px;
+    margin-bottom:16px;
+  }
+  .card h2{
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--muted);
+    margin:0 0 14px;
+  }
+
+  #pdf-viewer{
+    width:100%;
+    border-radius:8px;
+    overflow:hidden;
+    border:1px solid var(--line);
+    background:#fff;
+  }
+  #pdf-canvas{display:block;width:100%;height:auto;}
+  .pdf-nav{
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    gap:14px;
+    margin-top:10px;
+    font-size:13px;
+    color:var(--muted);
+  }
+  .pdf-nav button{
+    width:auto;
+    padding:6px 14px;
+    font-size:13px;
+    background:var(--panel-2);
+    color:var(--text);
+    border:1px solid var(--line);
+  }
+
+  canvas#signature-pad{
+    width:100%;
+    height:180px;
+    background:#fff;
+    border-radius:8px;
+    touch-action:none;
+    display:block;
+  }
+  .sig-actions{
+    display:flex;
+    gap:10px;
+    margin-top:10px;
+  }
+  .sig-actions button{
+    background:var(--panel-2);
+    color:var(--text);
+    border:1px solid var(--line);
+    font-size:13px;
+    padding:9px;
+  }
+
+  button.primary{
+    background:var(--accent);
+    color:#111;
+    border:none;
+    padding:14px 20px;
+    border-radius:8px;
+    font-weight:700;
+    font-size:15px;
+    cursor:pointer;
+    width:100%;
+  }
+  button.primary:hover{background:var(--accent-dim);}
+  button.primary:disabled{opacity:0.5;cursor:not-allowed;}
+
+  .confirm-line{
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    font-size:13px;
+    color:var(--muted);
+    margin-bottom:16px;
+  }
+  .confirm-line input{margin-top:3px;}
+
+  .center-state{
+    text-align:center;
+    padding:60px 20px;
+    color:var(--muted);
+  }
+  .center-state.err{color:var(--danger);}
+  .center-state h2{color:var(--text);font-size:18px;margin-bottom:8px;}
+
+  #status-msg{
+    font-size:13px;
+    padding:10px 12px;
+    border-radius:8px;
+    margin-top:12px;
+    display:none;
+  }
+  #status-msg.ok{display:block;background:rgba(63,220,143,0.12);color:var(--ok);}
+  #status-msg.err{display:block;background:rgba(255,92,92,0.12);color:var(--danger);}
+
+  .success-box{
+    text-align:center;
+    padding:50px 20px;
+  }
+  .success-box .check{
+    width:56px;height:56px;border-radius:50%;
+    background:rgba(63,220,143,0.15);
+    color:var(--ok);
+    display:flex;align-items:center;justify-content:center;
+    font-size:28px;
+    margin:0 auto 16px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Iron Jungle <span>· Assinatura Digital</span></h1>
+  <p>Termo de cancelamento</p>
+</header>
+
+<main id="app">
+  <div class="center-state" id="loading-state">Carregando documento...</div>
+</main>
+
+<script src="https://mozilla.github.io/pdf.js/build/pdf.mjs" type="module"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4/dist/signature_pad.umd.min.js"></script>
+<script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+<script type="module">
+import * as pdfjsLib from "https://mozilla.github.io/pdf.js/build/pdf.mjs";
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://mozilla.github.io/pdf.js/build/pdf.worker.mjs";
+
+// ============================================
+// CONFIGURAÇÃO — mesmos dados usados no admin.html
+// ============================================
+const SUPABASE_URL = "https://srhwanasvpzzagawablw.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyaHdhbmFzdnB6emFnYXdhYmx3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc4MzkyNjYsImV4cCI6MjEwMzQxNTI2Nn0.xMsO4LkGKwm2X15X2gfP79e0d02P0OC0shZkDw3nEZs";
+// ============================================
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const app = document.getElementById('app');
+
+const params = new URLSearchParams(window.location.search);
+const docId = params.get('id');
+
+let pdfBytes = null;
+let pdfDoc = null;
+let currentPage = 1;
+let totalPages = 1;
+let signaturePad = null;
+
+init();
+
+async function init() {
+  if (SUPABASE_URL.includes('COLE_AQUI')) {
+    app.innerHTML = `<div class="center-state err"><h2>Configuração pendente</h2>Preencha SUPABASE_URL e SUPABASE_ANON_KEY em assinar.html.</div>`;
+    return;
+  }
+  if (!docId) {
+    app.innerHTML = `<div class="center-state err"><h2>Link inválido</h2>Nenhum documento foi especificado.</div>`;
+    return;
+  }
+
+  const { data: doc, error } = await supabase
+    .from('documentos')
+    .select('*')
+    .eq('id', docId)
+    .single();
+
+  if (error || !doc) {
+    app.innerHTML = `<div class="center-state err"><h2>Documento não encontrado</h2>Verifique o link recebido.</div>`;
+    return;
+  }
+
+  if (doc.status === 'assinado') {
+    app.innerHTML = `<div class="success-box"><div class="check">✓</div><h2>Este termo já foi assinado</h2><p style="color:var(--muted)">Assinado em ${new Date(doc.signed_at).toLocaleDateString('pt-BR')}</p></div>`;
+    return;
+  }
+
+  const { data: fileData, error: downloadError } = await supabase.storage
+    .from('documentos')
+    .download(doc.pdf_original_path);
+
+  if (downloadError) {
+    app.innerHTML = `<div class="center-state err"><h2>Erro ao carregar PDF</h2>${downloadError.message}</div>`;
+    return;
+  }
+
+  pdfBytes = await fileData.arrayBuffer();
+  renderApp(doc);
+  await renderPdf();
+  setupSignaturePad();
+}
+
+function renderApp(doc) {
+  app.innerHTML = `
+    <div class="card">
+      <h2>Documento · ${escapeHtml(doc.aluno_nome)}</h2>
+      <div id="pdf-viewer"><canvas id="pdf-canvas"></canvas></div>
+      <div class="pdf-nav">
+        <button id="prev-page">← Anterior</button>
+        <span id="page-info">1 / 1</span>
+        <button id="next-page">Próxima →</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Sua rubrica</h2>
+      <canvas id="signature-pad"></canvas>
+      <div class="sig-actions">
+        <button id="clear-sig">Limpar</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <label class="confirm-line">
+        <input type="checkbox" id="confirm-check">
+        Li o documento acima e confirmo que a rubrica é minha assinatura para este termo.
+      </label>
+      <button class="primary" id="btn-confirmar" disabled>Confirmar assinatura</button>
+      <div id="status-msg"></div>
+    </div>
+  `;
+
+  document.getElementById('prev-page').addEventListener('click', () => mudarPagina(-1));
+  document.getElementById('next-page').addEventListener('click', () => mudarPagina(1));
+  document.getElementById('clear-sig').addEventListener('click', () => signaturePad.clear());
+  document.getElementById('confirm-check').addEventListener('change', atualizarBotaoConfirmar);
+  document.getElementById('btn-confirmar').addEventListener('click', () => confirmarAssinatura(doc));
+}
+
+async function renderPdf() {
+  pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes.slice(0) }).promise;
+  totalPages = pdfDoc.numPages;
+  await renderPage(currentPage);
+}
+
+async function renderPage(num) {
+  const page = await pdfDoc.getPage(num);
+  const canvas = document.getElementById('pdf-canvas');
+  const containerWidth = canvas.parentElement.clientWidth;
+  const unscaledViewport = page.getViewport({ scale: 1 });
+  const scale = containerWidth / unscaledViewport.width;
+  const viewport = page.getViewport({ scale });
+
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport }).promise;
+
+  document.getElementById('page-info').textContent = `${num} / ${totalPages}`;
+}
+
+function mudarPagina(delta) {
+  const novo = currentPage + delta;
+  if (novo < 1 || novo > totalPages) return;
+  currentPage = novo;
+  renderPage(currentPage);
+}
+
+function setupSignaturePad() {
+  const canvas = document.getElementById('signature-pad');
+  const ratio = Math.max(window.devicePixelRatio || 1, 1);
+  canvas.width = canvas.offsetWidth * ratio;
+  canvas.height = canvas.offsetHeight * ratio;
+  canvas.getContext('2d').scale(ratio, ratio);
+
+  signaturePad = new SignaturePad(canvas, {
+    backgroundColor: 'rgb(255,255,255)',
+    penColor: 'rgb(20,20,20)'
+  });
+}
+
+function atualizarBotaoConfirmar() {
+  const checked = document.getElementById('confirm-check').checked;
+  document.getElementById('btn-confirmar').disabled = !checked;
+}
+
+async function confirmarAssinatura(doc) {
+  if (signaturePad.isEmpty()) {
+    mostrarStatus('Desenhe sua rubrica antes de confirmar.', 'err');
+    return;
+  }
+
+  const btn = document.getElementById('btn-confirmar');
+  btn.disabled = true;
+  mostrarStatus('Aplicando assinatura...', 'ok');
+
+  try {
+    const sigDataUrl = signaturePad.toDataURL('image/png');
+    const sigBytes = await (await fetch(sigDataUrl)).arrayBuffer();
+
+    const { PDFDocument } = window.PDFLib;
+    const pdfLibDoc = await PDFDocument.load(pdfBytes);
+    const pages = pdfLibDoc.getPages();
+    const lastPage = pages[pages.length - 1];
+    const { width } = lastPage.getSize();
+
+    const sigImage = await pdfLibDoc.embedPng(sigBytes);
+    const sigWidth = 160;
+    const sigHeight = (sigImage.height / sigImage.width) * sigWidth;
+
+    lastPage.drawImage(sigImage, {
+      x: width - sigWidth - 50,
+      y: 60,
+      width: sigWidth,
+      height: sigHeight
+    });
+
+    lastPage.drawText(`Assinado digitalmente em ${new Date().toLocaleString('pt-BR')}`, {
+      x: width - sigWidth - 50,
+      y: 45,
+      size: 7
+    });
+
+    const pdfAssinadoBytes = await pdfLibDoc.save();
+    const caminhoAssinado = `assinados/${doc.id}.pdf`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('documentos')
+      .upload(caminhoAssinado, new Blob([pdfAssinadoBytes], { type: 'application/pdf' }), {
+        contentType: 'application/pdf'
+      });
+    if (uploadError) throw uploadError;
+
+    const { error: updateError } = await supabase
+      .from('documentos')
+      .update({
+        status: 'assinado',
+        pdf_assinado_path: caminhoAssinado,
+        signed_at: new Date().toISOString()
+      })
+      .eq('id', doc.id);
+    if (updateError) throw updateError;
+
+    app.innerHTML = `<div class="success-box"><div class="check">✓</div><h2>Assinatura enviada!</h2><p style="color:var(--muted)">Obrigado, ${escapeHtml(doc.aluno_nome)}. O termo foi assinado com sucesso.</p></div>`;
+  } catch (err) {
+    console.error(err);
+    mostrarStatus('Erro ao confirmar: ' + err.message, 'err');
+    btn.disabled = false;
+  }
+}
+
+function mostrarStatus(texto, tipo) {
+  const el = document.getElementById('status-msg');
+  el.textContent = texto;
+  el.className = tipo;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>

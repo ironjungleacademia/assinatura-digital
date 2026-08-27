@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iron Jungle — Painel de Assinaturas</title>
+<style>
+  :root{
+    --bg:#14161a;
+    --panel:#1c1f24;
+    --panel-2:#22262c;
+    --line:#2c3038;
+    --text:#eef0f2;
+    --muted:#8a919c;
+    --accent:#c7ff3f;
+    --accent-dim:#8fb92e;
+    --danger:#ff5c5c;
+    --ok:#3fdc8f;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Segoe UI',Roboto,-apple-system,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+  }
+  header{
+    padding:28px 24px 20px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    align-items:baseline;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+  header h1{
+    font-size:20px;
+    margin:0;
+    letter-spacing:0.02em;
+    text-transform:uppercase;
+  }
+  header h1 span{color:var(--accent);}
+  header p{margin:0;color:var(--muted);font-size:13px;}
+  main{max-width:760px;margin:0 auto;padding:24px 20px 60px;}
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:20px;
+    margin-bottom:18px;
+  }
+  .card h2{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--muted);
+    margin:0 0 16px;
+  }
+  label{
+    display:block;
+    font-size:13px;
+    color:var(--muted);
+    margin-bottom:6px;
+  }
+  input[type=text], input[type=file]{
+    width:100%;
+    padding:11px 12px;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    border-radius:8px;
+    color:var(--text);
+    font-size:14px;
+    margin-bottom:14px;
+  }
+  input[type=file]{padding:9px;}
+  button{
+    background:var(--accent);
+    color:#111;
+    border:none;
+    padding:12px 20px;
+    border-radius:8px;
+    font-weight:600;
+    font-size:14px;
+    cursor:pointer;
+    width:100%;
+  }
+  button:hover{background:var(--accent-dim);}
+  button:disabled{opacity:0.5;cursor:not-allowed;}
+
+  .row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    padding:14px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .row:last-child{border-bottom:none;}
+  .row-info{flex:1;min-width:0;}
+  .row-info .nome{font-weight:600;font-size:14px;}
+  .row-info .meta{font-size:12px;color:var(--muted);margin-top:2px;}
+  .badge{
+    font-size:11px;
+    padding:4px 10px;
+    border-radius:999px;
+    font-weight:600;
+    white-space:nowrap;
+  }
+  .badge.pendente{background:rgba(255,193,7,0.15);color:#ffc107;}
+  .badge.assinado{background:rgba(63,220,143,0.15);color:var(--ok);}
+  .row-actions{display:flex;gap:6px;flex-shrink:0;}
+  .icon-btn{
+    width:auto;
+    padding:7px 12px;
+    font-size:12px;
+    background:var(--panel-2);
+    color:var(--text);
+    border:1px solid var(--line);
+  }
+  .icon-btn:hover{background:#2a2f36;}
+  .icon-btn.copy{color:var(--accent);}
+
+  #status-msg{
+    font-size:13px;
+    padding:10px 12px;
+    border-radius:8px;
+    margin-top:10px;
+    display:none;
+  }
+  #status-msg.ok{display:block;background:rgba(63,220,143,0.12);color:var(--ok);}
+  #status-msg.err{display:block;background:rgba(255,92,92,0.12);color:var(--danger);}
+
+  .empty{color:var(--muted);font-size:13px;text-align:center;padding:20px 0;}
+
+  #config-warning{
+    background:rgba(255,92,92,0.1);
+    border:1px solid rgba(255,92,92,0.3);
+    color:#ffb0b0;
+    padding:14px 16px;
+    border-radius:var(--radius);
+    font-size:13px;
+    margin-bottom:18px;
+    display:none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Iron Jungle <span>· Assinaturas</span></h1>
+  <p>Envie termos de cancelamento para assinatura digital</p>
+</header>
+
+<main>
+  <div id="config-warning"></div>
+
+  <div class="card">
+    <h2>Novo documento</h2>
+    <label for="aluno-nome">Nome do aluno</label>
+    <input type="text" id="aluno-nome" placeholder="Ex: João Pereira">
+
+    <label for="pdf-file">Arquivo PDF (termo de cancelamento)</label>
+    <input type="file" id="pdf-file" accept="application/pdf">
+
+    <button id="btn-enviar">Gerar link de assinatura</button>
+    <div id="status-msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Documentos</h2>
+    <div id="lista-documentos">
+      <div class="empty">Carregando...</div>
+    </div>
+  </div>
+</main>
+
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script>
+// ============================================
+// CONFIGURAÇÃO — preencha com os dados do seu projeto Supabase
+// ============================================
+const SUPABASE_URL = "https://srhwanasvpzzagawablw.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyaHdhbmFzdnB6emFnYXdhYmx3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc4MzkyNjYsImV4cCI6MjEwMzQxNTI2Nn0.xMsO4LkGKwm2X15X2gfP79e0d02P0OC0shZkDw3nEZs";
+// URL base de onde a página assinar.html vai ficar publicada (GitHub Pages)
+const BASE_URL_ASSINATURA = "https://ironjungleacademia.github.io/assinatura-digital/assinar.html";
+// ============================================
+
+let supabase = null;
+const configWarning = document.getElementById('config-warning');
+
+if (SUPABASE_URL.includes('COLE_AQUI') || SUPABASE_ANON_KEY.includes('COLE_AQUI')) {
+  configWarning.style.display = 'block';
+  configWarning.innerHTML = '⚠️ Configure SUPABASE_URL e SUPABASE_ANON_KEY no topo do arquivo admin.html antes de usar. Veja o README.md.';
+} else {
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  carregarDocumentos();
+}
+
+const btnEnviar = document.getElementById('btn-enviar');
+const statusMsg = document.getElementById('status-msg');
+
+function mostrarStatus(texto, tipo) {
+  statusMsg.textContent = texto;
+  statusMsg.className = tipo;
+}
+
+btnEnviar.addEventListener('click', async () => {
+  if (!supabase) return;
+
+  const nome = document.getElementById('aluno-nome').value.trim();
+  const fileInput = document.getElementById('pdf-file');
+  const file = fileInput.files[0];
+
+  if (!nome) { mostrarStatus('Digite o nome do aluno.', 'err'); return; }
+  if (!file) { mostrarStatus('Selecione um arquivo PDF.', 'err'); return; }
+  if (file.type !== 'application/pdf') { mostrarStatus('O arquivo precisa ser um PDF.', 'err'); return; }
+
+  btnEnviar.disabled = true;
+  mostrarStatus('Enviando...', 'ok');
+
+  try {
+    const docId = crypto.randomUUID();
+    const caminhoArquivo = `originais/${docId}.pdf`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('documentos')
+      .upload(caminhoArquivo, file, { contentType: 'application/pdf' });
+
+    if (uploadError) throw uploadError;
+
+    const { error: insertError } = await supabase
+      .from('documentos')
+      .insert({
+        id: docId,
+        aluno_nome: nome,
+        pdf_original_path: caminhoArquivo,
+        status: 'pendente'
+      });
+
+    if (insertError) throw insertError;
+
+    mostrarStatus('Documento enviado! Link gerado abaixo.', 'ok');
+    document.getElementById('aluno-nome').value = '';
+    fileInput.value = '';
+    carregarDocumentos();
+  } catch (err) {
+    console.error(err);
+    mostrarStatus('Erro ao enviar: ' + err.message, 'err');
+  } finally {
+    btnEnviar.disabled = false;
+  }
+});
+
+async function carregarDocumentos() {
+  const lista = document.getElementById('lista-documentos');
+  const { data, error } = await supabase
+    .from('documentos')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    lista.innerHTML = `<div class="empty">Erro ao carregar: ${error.message}</div>`;
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    lista.innerHTML = '<div class="empty">Nenhum documento enviado ainda.</div>';
+    return;
+  }
+
+  lista.innerHTML = data.map(doc => {
+    const link = `${BASE_URL_ASSINATURA}?id=${doc.id}`;
+    const dataFormatada = new Date(doc.created_at).toLocaleDateString('pt-BR');
+    const badgeClasse = doc.status === 'assinado' ? 'assinado' : 'pendente';
+    const badgeTexto = doc.status === 'assinado' ? 'Assinado' : 'Pendente';
+
+    let botaoExtra = `<button class="icon-btn copy" onclick="copiarLink('${link}')">Copiar link</button>`;
+    if (doc.status === 'assinado' && doc.pdf_assinado_path) {
+      botaoExtra += `<button class="icon-btn" onclick="baixarAssinado('${doc.pdf_assinado_path}')">Baixar PDF</button>`;
+    }
+
+    return `
+      <div class="row">
+        <div class="row-info">
+          <div class="nome">${escapeHtml(doc.aluno_nome)}</div>
+          <div class="meta">${dataFormatada}${doc.signed_at ? ' · assinado em ' + new Date(doc.signed_at).toLocaleDateString('pt-BR') : ''}</div>
+        </div>
+        <span class="badge ${badgeClasse}">${badgeTexto}</span>
+        <div class="row-actions">${botaoExtra}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function copiarLink(link) {
+  await navigator.clipboard.writeText(link);
+  mostrarStatus('Link copiado! Envie para o aluno.', 'ok');
+}
+
+async function baixarAssinado(path) {
+  const { data, error } = await supabase.storage.from('documentos').download(path);
+  if (error) { alert('Erro ao baixar: ' + error.message); return; }
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = path.split('/').pop();
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>
