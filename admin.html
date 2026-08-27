@@ -192,6 +192,83 @@
     color:var(--text);
     border:1px solid var(--line);
   }
+
+  #pdf-editor-card{display:none;}
+  .pdf-edit-hint{
+    color:var(--muted);
+    font-size:13px;
+    margin:-6px 0 14px;
+  }
+  #pdf-edit-wrapper{
+    position:relative;
+    border-radius:8px;
+    overflow:hidden;
+    border:1px solid var(--line);
+    background:#fff;
+  }
+  #pdf-edit-canvas{display:block;width:100%;height:auto;cursor:crosshair;}
+  .campo-chip{
+    position:absolute;
+    background:rgba(199,255,63,0.95);
+    color:#111;
+    font-size:12px;
+    font-weight:600;
+    padding:3px 8px;
+    border-radius:4px;
+    transform:translate(0,-100%);
+    white-space:nowrap;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    cursor:pointer;
+  }
+  .campo-chip .remover-campo{
+    color:#a33;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .campo-input{
+    position:absolute;
+    transform:translate(0,-100%);
+    font-size:13px;
+    padding:4px 6px;
+    border:2px solid var(--accent);
+    border-radius:4px;
+    outline:none;
+    min-width:120px;
+  }
+  .edit-pdf-nav{
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    gap:14px;
+    margin-top:10px;
+    font-size:13px;
+    color:var(--muted);
+  }
+  .edit-pdf-nav button{
+    width:auto;
+    padding:6px 14px;
+    font-size:13px;
+    background:var(--panel-2);
+    color:var(--text);
+    border:1px solid var(--line);
+  }
+  #campos-lista{margin-top:14px;}
+  .campo-item{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:8px 0;
+    border-bottom:1px solid var(--line);
+    font-size:13px;
+  }
+  .campo-item:last-child{border-bottom:none;}
+  .campo-item .remover-campo{
+    color:var(--danger);
+    cursor:pointer;
+    font-size:12px;
+  }
 </style>
 </head>
 <body>
@@ -225,6 +302,20 @@
     <div id="status-msg"></div>
   </div>
 
+  <div class="card" id="pdf-editor-card">
+    <h2>Preencher informações no PDF (opcional)</h2>
+    <p class="pdf-edit-hint">Clique em qualquer lugar do documento para adicionar um valor (ex: valor da multa, forma de pagamento) antes de enviar para o aluno.</p>
+    <div id="pdf-edit-wrapper">
+      <canvas id="pdf-edit-canvas"></canvas>
+    </div>
+    <div class="edit-pdf-nav">
+      <button type="button" id="edit-prev-page">← Anterior</button>
+      <span id="edit-page-info">1 / 1</span>
+      <button type="button" id="edit-next-page">Próxima →</button>
+    </div>
+    <div id="campos-lista"></div>
+  </div>
+
   <div class="card">
     <h2>Documentos</h2>
     <label for="busca-documentos">Pesquisar por título ou aluno</label>
@@ -244,6 +335,12 @@
 </div>
 
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+<script type="module">
+  import * as pdfjsLib from "https://mozilla.github.io/pdf.js/build/pdf.mjs";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://mozilla.github.io/pdf.js/build/pdf.worker.mjs";
+  window.pdfjsLib = pdfjsLib;
+</script>
 <script>
 // ============================================
 // CONFIGURAÇÃO — preencha com os dados do seu projeto Supabase
@@ -298,6 +395,182 @@ function mostrarStatus(texto, tipo) {
   statusMsg.className = tipo;
 }
 
+// ============================================
+// Editor de campos no PDF (opcional, antes de enviar)
+// ============================================
+let editPdfDoc = null;
+let editCurrentPage = 1;
+let editTotalPages = 1;
+let editScale = 1;
+let editPageHeightUnscaled = 0;
+let camposPdf = []; // { page, xCanvas, yCanvas, pdfX, pdfY, texto }
+
+document.getElementById('pdf-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  camposPdf = [];
+  document.getElementById('campos-lista').innerHTML = '';
+
+  if (!file || file.type !== 'application/pdf') {
+    document.getElementById('pdf-editor-card').style.display = 'none';
+    return;
+  }
+
+  if (!window.pdfjsLib) {
+    mostrarStatus('Aguarde o carregador de PDF terminar de abrir e tente selecionar o arquivo novamente.', 'err');
+    return;
+  }
+
+  const bytes = await file.arrayBuffer();
+  editPdfDoc = await window.pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
+  editTotalPages = editPdfDoc.numPages;
+  editCurrentPage = 1;
+
+  document.getElementById('pdf-editor-card').style.display = 'block';
+  await renderEditPage(editCurrentPage);
+});
+
+document.getElementById('edit-prev-page').addEventListener('click', () => mudarPaginaEdicao(-1));
+document.getElementById('edit-next-page').addEventListener('click', () => mudarPaginaEdicao(1));
+
+function mudarPaginaEdicao(delta) {
+  const novo = editCurrentPage + delta;
+  if (novo < 1 || novo > editTotalPages) return;
+  editCurrentPage = novo;
+  renderEditPage(editCurrentPage);
+}
+
+async function renderEditPage(num) {
+  const page = await editPdfDoc.getPage(num);
+  const canvas = document.getElementById('pdf-edit-canvas');
+  const wrapper = document.getElementById('pdf-edit-wrapper');
+  const containerWidth = wrapper.clientWidth;
+  const unscaledViewport = page.getViewport({ scale: 1 });
+  editScale = containerWidth / unscaledViewport.width;
+  editPageHeightUnscaled = unscaledViewport.height;
+  const viewport = page.getViewport({ scale: editScale });
+
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport }).promise;
+
+  document.getElementById('edit-page-info').textContent = `${num} / ${editTotalPages}`;
+  renderizarChipsCampos();
+}
+
+document.getElementById('pdf-edit-canvas').addEventListener('click', (e) => {
+  const rect = e.target.getBoundingClientRect();
+  const xCanvas = e.clientX - rect.left;
+  const yCanvas = e.clientY - rect.top;
+  abrirInputCampo(xCanvas, yCanvas);
+});
+
+function abrirInputCampo(xCanvas, yCanvas, campoExistente) {
+  const wrapper = document.getElementById('pdf-edit-wrapper');
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'campo-input';
+  input.style.left = xCanvas + 'px';
+  input.style.top = yCanvas + 'px';
+  input.value = campoExistente ? campoExistente.texto : '';
+  input.placeholder = 'Digite o valor...';
+  wrapper.appendChild(input);
+  input.focus();
+
+  function commitar() {
+    const texto = input.value.trim();
+    wrapper.removeChild(input);
+
+    if (campoExistente) {
+      campoExistente.texto = texto;
+      if (!texto) {
+        camposPdf = camposPdf.filter(c => c !== campoExistente);
+      }
+    } else if (texto) {
+      const pdfX = xCanvas / editScale;
+      const pdfY = editPageHeightUnscaled - (yCanvas / editScale);
+      camposPdf.push({ page: editCurrentPage, xCanvas, yCanvas, pdfX, pdfY, texto });
+    }
+
+    renderizarChipsCampos();
+    renderizarListaCampos();
+  }
+
+  input.addEventListener('blur', commitar);
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') input.blur();
+  });
+}
+
+function renderizarChipsCampos() {
+  const wrapper = document.getElementById('pdf-edit-wrapper');
+  wrapper.querySelectorAll('.campo-chip').forEach(el => el.remove());
+
+  camposPdf
+    .filter(c => c.page === editCurrentPage)
+    .forEach(campo => {
+      const chip = document.createElement('div');
+      chip.className = 'campo-chip';
+      chip.style.left = campo.xCanvas + 'px';
+      chip.style.top = campo.yCanvas + 'px';
+      chip.innerHTML = `<span>${escapeHtml(campo.texto)}</span><span class="remover-campo">×</span>`;
+      chip.querySelector('span:first-child').addEventListener('click', (e) => {
+        e.stopPropagation();
+        abrirInputCampo(campo.xCanvas, campo.yCanvas, campo);
+      });
+      chip.querySelector('.remover-campo').addEventListener('click', (e) => {
+        e.stopPropagation();
+        camposPdf = camposPdf.filter(c => c !== campo);
+        renderizarChipsCampos();
+        renderizarListaCampos();
+      });
+      wrapper.appendChild(chip);
+    });
+}
+
+function renderizarListaCampos() {
+  const lista = document.getElementById('campos-lista');
+  if (camposPdf.length === 0) {
+    lista.innerHTML = '';
+    return;
+  }
+  lista.innerHTML = camposPdf.map((campo, i) => `
+    <div class="campo-item">
+      <span>Página ${campo.page} · ${escapeHtml(campo.texto)}</span>
+      <span class="remover-campo" data-idx="${i}">Remover</span>
+    </div>
+  `).join('');
+  lista.querySelectorAll('.remover-campo').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = parseInt(el.dataset.idx, 10);
+      camposPdf.splice(idx, 1);
+      renderizarChipsCampos();
+      renderizarListaCampos();
+    });
+  });
+}
+
+async function gerarPdfComCampos(file) {
+  const bytes = await file.arrayBuffer();
+  const { PDFDocument } = window.PDFLib;
+  const pdfLibDoc = await PDFDocument.load(bytes);
+  const pages = pdfLibDoc.getPages();
+
+  for (const campo of camposPdf) {
+    const page = pages[campo.page - 1];
+    if (!page) continue;
+    page.drawText(campo.texto, {
+      x: campo.pdfX,
+      y: campo.pdfY,
+      size: 12
+    });
+  }
+
+  const finalBytes = await pdfLibDoc.save();
+  return new Blob([finalBytes], { type: 'application/pdf' });
+}
+
 btnEnviar.addEventListener('click', async () => {
   if (!supabaseClient) return;
 
@@ -318,15 +591,16 @@ btnEnviar.addEventListener('click', async () => {
   if (file.type !== 'application/pdf') { mostrarStatus('O arquivo precisa ser um PDF.', 'err'); return; }
 
   btnEnviar.disabled = true;
-  mostrarStatus('Enviando...', 'ok');
+  mostrarStatus(camposPdf.length > 0 ? 'Aplicando informações no PDF e enviando...' : 'Enviando...', 'ok');
 
   try {
     const docId = crypto.randomUUID();
     const caminhoArquivo = `originais/${docId}.pdf`;
+    const arquivoFinal = camposPdf.length > 0 ? await gerarPdfComCampos(file) : file;
 
     const { error: uploadError } = await supabaseClient.storage
       .from('documentos')
-      .upload(caminhoArquivo, file, { contentType: 'application/pdf' });
+      .upload(caminhoArquivo, arquivoFinal, { contentType: 'application/pdf' });
 
     if (uploadError) throw uploadError;
 
@@ -350,6 +624,9 @@ btnEnviar.addEventListener('click', async () => {
     document.getElementById('aluno-cpf').value = '';
     document.getElementById('aluno-nascimento').value = '';
     fileInput.value = '';
+    camposPdf = [];
+    document.getElementById('campos-lista').innerHTML = '';
+    document.getElementById('pdf-editor-card').style.display = 'none';
     carregarDocumentos();
   } catch (err) {
     console.error(err);
