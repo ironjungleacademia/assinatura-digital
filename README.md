@@ -52,6 +52,7 @@ alter table documentos add column if not exists aluno_cpf text;
 alter table documentos add column if not exists aluno_nascimento text;
 alter table documentos add column if not exists ip_assinatura text;
 alter table documentos add column if not exists user_agent_assinatura text;
+alter table documentos add column if not exists titulo text;
 ```
 
 ## Passo 3 — Criar o bucket de armazenamento

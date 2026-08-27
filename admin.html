@@ -158,6 +158,9 @@
 
   <div class="card">
     <h2>Novo documento</h2>
+    <label for="doc-titulo">Título do documento</label>
+    <input type="text" id="doc-titulo" placeholder="Ex: Termo de cancelamento, Termo de responsabilidade...">
+
     <label for="aluno-nome">Nome do aluno</label>
     <input type="text" id="aluno-nome" placeholder="Ex: João Pereira">
 
@@ -167,7 +170,7 @@
     <label for="aluno-nascimento">Data de nascimento</label>
     <input type="text" id="aluno-nascimento" placeholder="DD/MM/AAAA" maxlength="10">
 
-    <label for="pdf-file">Arquivo PDF (termo de cancelamento)</label>
+    <label for="pdf-file">Arquivo PDF</label>
     <input type="file" id="pdf-file" accept="application/pdf">
 
     <button id="btn-enviar">Gerar link de assinatura</button>
@@ -176,6 +179,8 @@
 
   <div class="card">
     <h2>Documentos</h2>
+    <label for="busca-documentos">Pesquisar por título ou aluno</label>
+    <input type="text" id="busca-documentos" placeholder="Ex: cancelamento, João..." style="margin-bottom:16px;">
     <div id="lista-documentos">
       <div class="empty">Carregando...</div>
     </div>
@@ -240,12 +245,14 @@ function mostrarStatus(texto, tipo) {
 btnEnviar.addEventListener('click', async () => {
   if (!supabaseClient) return;
 
+  const titulo = document.getElementById('doc-titulo').value.trim();
   const nome = document.getElementById('aluno-nome').value.trim();
   const cpf = document.getElementById('aluno-cpf').value.trim();
   const nascimento = document.getElementById('aluno-nascimento').value.trim();
   const fileInput = document.getElementById('pdf-file');
   const file = fileInput.files[0];
 
+  if (!titulo) { mostrarStatus('Digite o título do documento.', 'err'); return; }
   if (!nome) { mostrarStatus('Digite o nome do aluno.', 'err'); return; }
   if (!cpf) { mostrarStatus('Digite o CPF do aluno.', 'err'); return; }
   if (!/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/.test(cpf)) { mostrarStatus('CPF inválido. Use o formato 123.456.789-00.', 'err'); return; }
@@ -271,6 +278,7 @@ btnEnviar.addEventListener('click', async () => {
       .from('documentos')
       .insert({
         id: docId,
+        titulo: titulo,
         aluno_nome: nome,
         aluno_cpf: cpf.replace(/\D/g, ''),
         aluno_nascimento: nascimento,
@@ -281,6 +289,7 @@ btnEnviar.addEventListener('click', async () => {
     if (insertError) throw insertError;
 
     mostrarStatus('Documento enviado! Link gerado abaixo.', 'ok');
+    document.getElementById('doc-titulo').value = '';
     document.getElementById('aluno-nome').value = '';
     document.getElementById('aluno-cpf').value = '';
     document.getElementById('aluno-nascimento').value = '';
@@ -294,6 +303,8 @@ btnEnviar.addEventListener('click', async () => {
   }
 });
 
+let todosDocumentos = [];
+
 async function carregarDocumentos() {
   const lista = document.getElementById('lista-documentos');
   const { data, error } = await supabaseClient
@@ -306,12 +317,19 @@ async function carregarDocumentos() {
     return;
   }
 
-  if (!data || data.length === 0) {
-    lista.innerHTML = '<div class="empty">Nenhum documento enviado ainda.</div>';
+  todosDocumentos = data || [];
+  renderizarDocumentos(todosDocumentos);
+}
+
+function renderizarDocumentos(lista_dados) {
+  const lista = document.getElementById('lista-documentos');
+
+  if (!lista_dados || lista_dados.length === 0) {
+    lista.innerHTML = '<div class="empty">Nenhum documento encontrado.</div>';
     return;
   }
 
-  lista.innerHTML = data.map(doc => {
+  lista.innerHTML = lista_dados.map(doc => {
     const link = `${BASE_URL_ASSINATURA}?id=${doc.id}`;
     const dataFormatada = new Date(doc.created_at).toLocaleDateString('pt-BR');
     const badgeClasse = doc.status === 'assinado' ? 'assinado' : 'pendente';
@@ -325,7 +343,7 @@ async function carregarDocumentos() {
     return `
       <div class="row">
         <div class="row-info">
-          <div class="nome">${escapeHtml(doc.aluno_nome)}</div>
+          <div class="nome">${escapeHtml(doc.titulo || 'Sem título')} · ${escapeHtml(doc.aluno_nome)}</div>
           <div class="meta">${dataFormatada}${doc.signed_at ? ' · assinado em ' + new Date(doc.signed_at).toLocaleDateString('pt-BR') + (doc.ip_assinatura ? ' · IP ' + doc.ip_assinatura : '') : ''}</div>
         </div>
         <span class="badge ${badgeClasse}">${badgeTexto}</span>
@@ -334,6 +352,19 @@ async function carregarDocumentos() {
     `;
   }).join('');
 }
+
+document.getElementById('busca-documentos').addEventListener('input', (e) => {
+  const termo = e.target.value.trim().toLowerCase();
+  if (!termo) {
+    renderizarDocumentos(todosDocumentos);
+    return;
+  }
+  const filtrados = todosDocumentos.filter(doc =>
+    (doc.titulo || '').toLowerCase().includes(termo) ||
+    (doc.aluno_nome || '').toLowerCase().includes(termo)
+  );
+  renderizarDocumentos(filtrados);
+});
 
 async function copiarLink(link) {
   await navigator.clipboard.writeText(link);
