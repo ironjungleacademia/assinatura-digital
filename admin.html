@@ -144,6 +144,54 @@
     margin-bottom:18px;
     display:none;
   }
+
+  .modal-overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.6);
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+    z-index:100;
+  }
+  .modal-overlay.aberto{display:flex;}
+  .modal-box{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:22px;
+    max-width:440px;
+    width:100%;
+    max-height:80vh;
+    overflow-y:auto;
+  }
+  .modal-box h3{
+    margin:0 0 16px;
+    font-size:15px;
+  }
+  .detalhe-item{
+    padding:10px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .detalhe-item:last-child{border-bottom:none;}
+  .detalhe-label{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--muted);
+    margin-bottom:3px;
+  }
+  .detalhe-valor{
+    font-size:14px;
+    word-break:break-word;
+  }
+  .modal-fechar{
+    margin-top:16px;
+    background:var(--panel-2);
+    color:var(--text);
+    border:1px solid var(--line);
+  }
 </style>
 </head>
 <body>
@@ -186,6 +234,14 @@
     </div>
   </div>
 </main>
+
+<div class="modal-overlay" id="modal-detalhes">
+  <div class="modal-box">
+    <h3>Detalhes do documento</h3>
+    <div id="modal-conteudo"></div>
+    <button class="modal-fechar" onclick="fecharDetalhes()">Fechar</button>
+  </div>
+</div>
 
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script>
@@ -339,6 +395,7 @@ function renderizarDocumentos(lista_dados) {
     if (doc.status === 'assinado' && doc.pdf_assinado_path) {
       botaoExtra += `<button class="icon-btn" onclick="baixarAssinado('${doc.pdf_assinado_path}')">Baixar PDF</button>`;
     }
+    botaoExtra += `<button class="icon-btn" onclick="verDetalhes('${doc.id}')">Detalhes</button>`;
 
     return `
       <div class="row">
@@ -365,6 +422,36 @@ document.getElementById('busca-documentos').addEventListener('input', (e) => {
   );
   renderizarDocumentos(filtrados);
 });
+
+function verDetalhes(docId) {
+  const doc = todosDocumentos.find(d => d.id === docId);
+  if (!doc) return;
+
+  const itens = [
+    ['Título', doc.titulo || 'Sem título'],
+    ['Aluno', doc.aluno_nome],
+    ['CPF', doc.aluno_cpf ? mascararCpf(doc.aluno_cpf) : '—'],
+    ['Data de nascimento', doc.aluno_nascimento || '—'],
+    ['Status', doc.status === 'assinado' ? 'Assinado' : 'Pendente'],
+    ['Criado em', new Date(doc.created_at).toLocaleString('pt-BR')],
+    ['Assinado em', doc.signed_at ? new Date(doc.signed_at).toLocaleString('pt-BR') : '—'],
+    ['IP da assinatura', doc.ip_assinatura || '—'],
+    ['Navegador/dispositivo', doc.user_agent_assinatura || '—']
+  ];
+
+  document.getElementById('modal-conteudo').innerHTML = itens.map(([label, valor]) => `
+    <div class="detalhe-item">
+      <div class="detalhe-label">${escapeHtml(label)}</div>
+      <div class="detalhe-valor">${escapeHtml(String(valor))}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('modal-detalhes').classList.add('aberto');
+}
+
+function fecharDetalhes() {
+  document.getElementById('modal-detalhes').classList.remove('aberto');
+}
 
 async function copiarLink(link) {
   await navigator.clipboard.writeText(link);

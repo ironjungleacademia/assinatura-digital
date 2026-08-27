@@ -401,6 +401,15 @@ async function confirmarAssinatura(doc) {
   mostrarStatus('Aplicando assinatura...', 'ok');
 
   try {
+    let ipAssinatura = null;
+    try {
+      const ipResp = await fetch('https://api.ipify.org?format=json');
+      const ipJson = await ipResp.json();
+      ipAssinatura = ipJson.ip;
+    } catch (e) {
+      console.warn('Não foi possível obter o IP:', e);
+    }
+
     const sigDataUrl = signaturePad.toDataURL('image/png');
     const sigBytes = await (await fetch(sigDataUrl)).arrayBuffer();
 
@@ -416,28 +425,28 @@ async function confirmarAssinatura(doc) {
 
     lastPage.drawImage(sigImage, {
       x: width - sigWidth - 50,
-      y: 60,
+      y: 68,
       width: sigWidth,
       height: sigHeight
     });
 
-    lastPage.drawText(`Assinado digitalmente em ${new Date().toLocaleString('pt-BR')}`, {
+    const linhaData = `Assinado digitalmente em ${new Date().toLocaleString('pt-BR')}`;
+    const linhaIp = `IP: ${ipAssinatura || 'não identificado'}`;
+
+    lastPage.drawText(linhaData, {
       x: width - sigWidth - 50,
-      y: 45,
+      y: 52,
+      size: 7
+    });
+
+    lastPage.drawText(linhaIp, {
+      x: width - sigWidth - 50,
+      y: 42,
       size: 7
     });
 
     const pdfAssinadoBytes = await pdfLibDoc.save();
     const caminhoAssinado = `assinados/${doc.id}.pdf`;
-
-    let ipAssinatura = null;
-    try {
-      const ipResp = await fetch('https://api.ipify.org?format=json');
-      const ipJson = await ipResp.json();
-      ipAssinatura = ipJson.ip;
-    } catch (e) {
-      console.warn('Não foi possível obter o IP:', e);
-    }
 
     const { error: uploadError } = await supabase.storage
       .from('documentos')
