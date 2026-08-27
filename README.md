@@ -43,6 +43,17 @@ create policy "allow all insert" on documentos for insert with check (true);
 create policy "allow all update" on documentos for update using (true);
 ```
 
+### Se a tabela `documentos` já existir (atualização com verificação de identidade)
+
+Se você já criou a tabela antes, rode este SQL adicional para acrescentar os campos de verificação por CPF/data de nascimento e o registro de IP/navegador na assinatura:
+
+```sql
+alter table documentos add column if not exists aluno_cpf text;
+alter table documentos add column if not exists aluno_nascimento text;
+alter table documentos add column if not exists ip_assinatura text;
+alter table documentos add column if not exists user_agent_assinatura text;
+```
+
 ## Passo 3 — Criar o bucket de armazenamento
 
 Em **Storage**, crie um bucket chamado `documentos`, marcado como **público** (leitura pública).
@@ -79,9 +90,9 @@ Cole essas duas informações no topo de **ambos** os arquivos `admin.html` e `a
 
 ## Segurança — pontos a saber
 
-- O acesso é por **link único** (UUID), não por senha. Quem tiver o link acessa o documento — como a maioria das ferramentas simples de assinatura por link.
-- O PDF assinado grava data/hora da assinatura como prova, mas **não é uma assinatura digital certificada (ICP-Brasil)** — é uma rubrica desenhada, com valor probatório similar ao de uma assinatura física escaneada. Para termos de cancelamento internos isso costuma ser suficiente, mas se precisar de validade jurídica mais forte, vale considerar isso.
-- Para reforçar a prova, dá pra adicionar registro de IP e user-agent do aluno no banco (fica fácil de acrescentar depois).
+- Antes de abrir o documento, o aluno precisa confirmar **CPF e data de nascimento** cadastrados por você no envio — isso vincula a assinatura à identidade real do aluno, não só a quem tiver o link.
+- No momento da assinatura, o sistema também grava automaticamente o **IP** e o **navegador/dispositivo** usados, como reforço de prova.
+- Ainda assim, **não é uma assinatura digital certificada (ICP-Brasil)** — é uma rubrica desenhada com verificação de identidade básica, com valor probatório similar ao de uma assinatura física acompanhada de conferência de documento. Para termos de cancelamento internos isso costuma ser suficiente, mas se precisar de validade jurídica mais forte (ex: contestação judicial), vale considerar certificado digital via gov.br.
 
 ## Próximos passos possíveis
 

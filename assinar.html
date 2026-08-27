@@ -226,19 +226,58 @@ async function init() {
     return;
   }
 
-  const { data: fileData, error: downloadError } = await supabase.storage
-    .from('documentos')
-    .download(doc.pdf_original_path);
+  renderVerificacao(doc);
+}
 
-  if (downloadError) {
-    app.innerHTML = `<div class="center-state err"><h2>Erro ao carregar PDF</h2>${downloadError.message}</div>`;
-    return;
-  }
+function renderVerificacao(doc) {
+  app.innerHTML = `
+    <div class="card">
+      <h2>Confirme sua identidade</h2>
+      <p style="color:var(--muted);font-size:13px;margin:-6px 0 16px;">Para abrir o documento de ${escapeHtml(doc.aluno_nome)}, confirme seu CPF e data de nascimento.</p>
+      <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:6px;">CPF</label>
+      <input type="text" id="verif-cpf" placeholder="123.456.789-00" maxlength="14"
+        style="width:100%;padding:11px 12px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;color:var(--text);font-size:14px;margin-bottom:14px;">
+      <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:6px;">Data de nascimento</label>
+      <input type="text" id="verif-nascimento" placeholder="DD/MM/AAAA" maxlength="10"
+        style="width:100%;padding:11px 12px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;color:var(--text);font-size:14px;margin-bottom:14px;">
+      <button class="primary" id="btn-verificar">Continuar</button>
+      <div id="status-msg"></div>
+    </div>
+  `;
 
-  pdfBytes = await fileData.arrayBuffer();
-  renderApp(doc);
-  await renderPdf();
-  setupSignaturePad();
+  document.getElementById('btn-verificar').addEventListener('click', async () => {
+    const cpfDigitado = document.getElementById('verif-cpf').value.replace(/\D/g, '');
+    const nascimentoDigitado = document.getElementById('verif-nascimento').value.trim();
+    const cpfCadastrado = (doc.aluno_cpf || '').replace(/\D/g, '');
+
+    if (!cpfDigitado || !nascimentoDigitado) {
+      mostrarStatus('Preencha CPF e data de nascimento.', 'err');
+      return;
+    }
+
+    if (cpfDigitado !== cpfCadastrado || nascimentoDigitado !== doc.aluno_nascimento) {
+      mostrarStatus('CPF ou data de nascimento não conferem com o cadastro.', 'err');
+      return;
+    }
+
+    const btn = document.getElementById('btn-verificar');
+    btn.disabled = true;
+    mostrarStatus('Carregando documento...', 'ok');
+
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from('documentos')
+      .download(doc.pdf_original_path);
+
+    if (downloadError) {
+      app.innerHTML = `<div class="center-state err"><h2>Erro ao carregar PDF</h2>${downloadError.message}</div>`;
+      return;
+    }
+
+    pdfBytes = await fileData.arrayBuffer();
+    renderApp(doc);
+    await renderPdf();
+    setupSignaturePad();
+  });
 }
 
 function renderApp(doc) {
@@ -366,6 +405,15 @@ async function confirmarAssinatura(doc) {
     const pdfAssinadoBytes = await pdfLibDoc.save();
     const caminhoAssinado = `assinados/${doc.id}.pdf`;
 
+    let ipAssinatura = null;
+    try {
+      const ipResp = await fetch('https://api.ipify.org?format=json');
+      const ipJson = await ipResp.json();
+      ipAssinatura = ipJson.ip;
+    } catch (e) {
+      console.warn('Não foi possível obter o IP:', e);
+    }
+
     const { error: uploadError } = await supabase.storage
       .from('documentos')
       .upload(caminhoAssinado, new Blob([pdfAssinadoBytes], { type: 'application/pdf' }), {
@@ -378,7 +426,9 @@ async function confirmarAssinatura(doc) {
       .update({
         status: 'assinado',
         pdf_assinado_path: caminhoAssinado,
-        signed_at: new Date().toISOString()
+        signed_at: new Date().toISOString(),
+        ip_assinatura: ipAssinatura,
+        user_agent_assinatura: navigator.userAgent
       })
       .eq('id', doc.id);
     if (updateError) throw updateError;

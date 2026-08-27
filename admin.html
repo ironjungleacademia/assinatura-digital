@@ -161,6 +161,12 @@
     <label for="aluno-nome">Nome do aluno</label>
     <input type="text" id="aluno-nome" placeholder="Ex: João Pereira">
 
+    <label for="aluno-cpf">CPF do aluno</label>
+    <input type="text" id="aluno-cpf" placeholder="Ex: 123.456.789-00" maxlength="14">
+
+    <label for="aluno-nascimento">Data de nascimento</label>
+    <input type="text" id="aluno-nascimento" placeholder="DD/MM/AAAA" maxlength="10">
+
     <label for="pdf-file">Arquivo PDF (termo de cancelamento)</label>
     <input type="file" id="pdf-file" accept="application/pdf">
 
@@ -210,10 +216,16 @@ btnEnviar.addEventListener('click', async () => {
   if (!supabaseClient) return;
 
   const nome = document.getElementById('aluno-nome').value.trim();
+  const cpf = document.getElementById('aluno-cpf').value.trim();
+  const nascimento = document.getElementById('aluno-nascimento').value.trim();
   const fileInput = document.getElementById('pdf-file');
   const file = fileInput.files[0];
 
   if (!nome) { mostrarStatus('Digite o nome do aluno.', 'err'); return; }
+  if (!cpf) { mostrarStatus('Digite o CPF do aluno.', 'err'); return; }
+  if (!/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/.test(cpf)) { mostrarStatus('CPF inválido. Use o formato 123.456.789-00.', 'err'); return; }
+  if (!nascimento) { mostrarStatus('Digite a data de nascimento do aluno.', 'err'); return; }
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(nascimento)) { mostrarStatus('Data inválida. Use o formato DD/MM/AAAA.', 'err'); return; }
   if (!file) { mostrarStatus('Selecione um arquivo PDF.', 'err'); return; }
   if (file.type !== 'application/pdf') { mostrarStatus('O arquivo precisa ser um PDF.', 'err'); return; }
 
@@ -235,6 +247,8 @@ btnEnviar.addEventListener('click', async () => {
       .insert({
         id: docId,
         aluno_nome: nome,
+        aluno_cpf: cpf.replace(/\D/g, ''),
+        aluno_nascimento: nascimento,
         pdf_original_path: caminhoArquivo,
         status: 'pendente'
       });
@@ -243,6 +257,8 @@ btnEnviar.addEventListener('click', async () => {
 
     mostrarStatus('Documento enviado! Link gerado abaixo.', 'ok');
     document.getElementById('aluno-nome').value = '';
+    document.getElementById('aluno-cpf').value = '';
+    document.getElementById('aluno-nascimento').value = '';
     fileInput.value = '';
     carregarDocumentos();
   } catch (err) {
@@ -285,7 +301,7 @@ async function carregarDocumentos() {
       <div class="row">
         <div class="row-info">
           <div class="nome">${escapeHtml(doc.aluno_nome)}</div>
-          <div class="meta">${dataFormatada}${doc.signed_at ? ' · assinado em ' + new Date(doc.signed_at).toLocaleDateString('pt-BR') : ''}</div>
+          <div class="meta">${dataFormatada}${doc.signed_at ? ' · assinado em ' + new Date(doc.signed_at).toLocaleDateString('pt-BR') + (doc.ip_assinatura ? ' · IP ' + doc.ip_assinatura : '') : ''}</div>
         </div>
         <span class="badge ${badgeClasse}">${badgeTexto}</span>
         <div class="row-actions">${botaoExtra}</div>
