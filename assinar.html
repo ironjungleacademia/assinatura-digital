@@ -416,16 +416,24 @@ async function confirmarAssinatura(doc) {
     const { PDFDocument } = window.PDFLib;
     const pdfLibDoc = await PDFDocument.load(pdfBytes);
     const pages = pdfLibDoc.getPages();
-    const lastPage = pages[pages.length - 1];
-    const { width } = lastPage.getSize();
+
+    const paginaAlvo = doc.assinatura_pagina
+      ? (pages[doc.assinatura_pagina - 1] || pages[pages.length - 1])
+      : pages[pages.length - 1];
+    const { width } = paginaAlvo.getSize();
 
     const sigImage = await pdfLibDoc.embedPng(sigBytes);
     const sigWidth = 160;
     const sigHeight = (sigImage.height / sigImage.width) * sigWidth;
 
-    lastPage.drawImage(sigImage, {
-      x: width - sigWidth - 50,
-      y: 68,
+    const temPosicaoCustom = doc.assinatura_x !== null && doc.assinatura_x !== undefined
+      && doc.assinatura_y !== null && doc.assinatura_y !== undefined;
+    const sigX = temPosicaoCustom ? doc.assinatura_x : width - sigWidth - 50;
+    const sigY = temPosicaoCustom ? doc.assinatura_y : 68;
+
+    paginaAlvo.drawImage(sigImage, {
+      x: sigX,
+      y: sigY,
       width: sigWidth,
       height: sigHeight
     });
@@ -433,15 +441,15 @@ async function confirmarAssinatura(doc) {
     const linhaData = `Assinado digitalmente em ${new Date().toLocaleString('pt-BR')}`;
     const linhaIp = `IP: ${ipAssinatura || 'não identificado'}`;
 
-    lastPage.drawText(linhaData, {
-      x: width - sigWidth - 50,
-      y: 52,
+    paginaAlvo.drawText(linhaData, {
+      x: sigX,
+      y: sigY - 16,
       size: 7
     });
 
-    lastPage.drawText(linhaIp, {
-      x: width - sigWidth - 50,
-      y: 42,
+    paginaAlvo.drawText(linhaIp, {
+      x: sigX,
+      y: sigY - 26,
       size: 7
     });
 

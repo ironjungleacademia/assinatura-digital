@@ -239,6 +239,52 @@
     outline:none;
     min-width:120px;
   }
+  .assinatura-marker{
+    position:absolute;
+    width:140px;
+    height:44px;
+    border:2px dashed #4da6ff;
+    border-radius:6px;
+    background:rgba(77,166,255,0.12);
+    color:#0a6fd6;
+    font-size:11px;
+    font-weight:700;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    transform:translate(0,-100%);
+    user-select:none;
+    touch-action:none;
+    cursor:move;
+  }
+  .assinatura-marker .remover-assinatura{
+    position:absolute;
+    top:-10px;
+    right:-10px;
+    background:#ff5c5c;
+    color:#fff;
+    width:18px;
+    height:18px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:12px;
+    cursor:pointer;
+  }
+  .btn-marcar-assinatura{
+    background:var(--panel-2);
+    color:var(--text);
+    border:1px solid var(--line);
+    font-size:13px;
+    margin-top:12px;
+  }
+  .btn-marcar-assinatura.ativo{
+    background:#4da6ff;
+    color:#111;
+    border-color:#4da6ff;
+  }
   .edit-pdf-nav{
     display:flex;
     justify-content:center;
@@ -315,6 +361,7 @@
       <span id="edit-page-info">1 / 1</span>
       <button type="button" id="edit-next-page">Próxima →</button>
     </div>
+    <button type="button" class="btn-marcar-assinatura" id="btn-marcar-assinatura">📍 Marcar onde o aluno assina (opcional)</button>
     <div id="campos-lista"></div>
   </div>
 
@@ -406,10 +453,15 @@ let editTotalPages = 1;
 let editScale = 1;
 let editPageHeightUnscaled = 0;
 let camposPdf = []; // { page, xCanvas, yCanvas, pdfX, pdfY, texto }
+let assinaturaPos = null; // { page, xCanvas, yCanvas, pdfX, pdfY }
+let modoMarcarAssinatura = false;
 
 document.getElementById('pdf-file').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   camposPdf = [];
+  assinaturaPos = null;
+  modoMarcarAssinatura = false;
+  atualizarBotaoMarcarAssinatura();
   document.getElementById('campos-lista').innerHTML = '';
 
   if (!file || file.type !== 'application/pdf') {
@@ -459,14 +511,100 @@ async function renderEditPage(num) {
 
   document.getElementById('edit-page-info').textContent = `${num} / ${editTotalPages}`;
   renderizarChipsCampos();
+  renderizarMarcadorAssinatura();
 }
 
 document.getElementById('pdf-edit-canvas').addEventListener('click', (e) => {
   const rect = e.target.getBoundingClientRect();
   const xCanvas = e.clientX - rect.left;
   const yCanvas = e.clientY - rect.top;
+
+  if (modoMarcarAssinatura) {
+    const pdfX = xCanvas / editScale;
+    const pdfY = editPageHeightUnscaled - (yCanvas / editScale);
+    assinaturaPos = { page: editCurrentPage, xCanvas, yCanvas, pdfX, pdfY };
+    modoMarcarAssinatura = false;
+    atualizarBotaoMarcarAssinatura();
+    renderizarMarcadorAssinatura();
+    return;
+  }
+
   abrirInputCampo(xCanvas, yCanvas);
 });
+
+document.getElementById('btn-marcar-assinatura').addEventListener('click', () => {
+  modoMarcarAssinatura = !modoMarcarAssinatura;
+  atualizarBotaoMarcarAssinatura();
+});
+
+function atualizarBotaoMarcarAssinatura() {
+  const btn = document.getElementById('btn-marcar-assinatura');
+  if (modoMarcarAssinatura) {
+    btn.classList.add('ativo');
+    btn.textContent = '📍 Clique no PDF para posicionar...';
+  } else {
+    btn.classList.remove('ativo');
+    btn.textContent = assinaturaPos ? '📍 Reposicionar assinatura' : '📍 Marcar onde o aluno assina (opcional)';
+  }
+}
+
+function renderizarMarcadorAssinatura() {
+  const wrapper = document.getElementById('pdf-edit-wrapper');
+  const existente = wrapper.querySelector('.assinatura-marker');
+  if (existente) existente.remove();
+
+  if (!assinaturaPos || assinaturaPos.page !== editCurrentPage) return;
+
+  const marker = document.createElement('div');
+  marker.className = 'assinatura-marker';
+  marker.style.left = assinaturaPos.xCanvas + 'px';
+  marker.style.top = assinaturaPos.yCanvas + 'px';
+  marker.innerHTML = `Assinatura aqui<span class="remover-assinatura">×</span>`;
+
+  marker.querySelector('.remover-assinatura').addEventListener('click', (e) => {
+    e.stopPropagation();
+    assinaturaPos = null;
+    atualizarBotaoMarcarAssinatura();
+    renderizarMarcadorAssinatura();
+  });
+
+  let arrastando = false;
+  let moveu = false;
+
+  marker.addEventListener('pointerdown', (e) => {
+    if (e.target.classList.contains('remover-assinatura')) return;
+    e.stopPropagation();
+    arrastando = true;
+    moveu = false;
+    marker.setPointerCapture(e.pointerId);
+  });
+
+  marker.addEventListener('pointermove', (e) => {
+    if (!arrastando) return;
+    moveu = true;
+    const wrapperRect = wrapper.getBoundingClientRect();
+    let novoX = e.clientX - wrapperRect.left;
+    let novoY = e.clientY - wrapperRect.top;
+    novoX = Math.max(0, Math.min(novoX, wrapperRect.width));
+    novoY = Math.max(0, Math.min(novoY, wrapperRect.height));
+
+    assinaturaPos.xCanvas = novoX;
+    assinaturaPos.yCanvas = novoY;
+    marker.style.left = novoX + 'px';
+    marker.style.top = novoY + 'px';
+  });
+
+  marker.addEventListener('pointerup', (e) => {
+    arrastando = false;
+    if (marker.hasPointerCapture(e.pointerId)) marker.releasePointerCapture(e.pointerId);
+    if (moveu) {
+      assinaturaPos.pdfX = assinaturaPos.xCanvas / editScale;
+      assinaturaPos.pdfY = editPageHeightUnscaled - (assinaturaPos.yCanvas / editScale);
+    }
+  });
+
+  wrapper.appendChild(marker);
+}
 
 function abrirInputCampo(xCanvas, yCanvas, campoExistente) {
   const wrapper = document.getElementById('pdf-edit-wrapper');
@@ -659,7 +797,10 @@ btnEnviar.addEventListener('click', async () => {
         aluno_cpf: cpf.replace(/\D/g, ''),
         aluno_nascimento: nascimento,
         pdf_original_path: caminhoArquivo,
-        status: 'pendente'
+        status: 'pendente',
+        assinatura_pagina: assinaturaPos ? assinaturaPos.page : null,
+        assinatura_x: assinaturaPos ? assinaturaPos.pdfX : null,
+        assinatura_y: assinaturaPos ? assinaturaPos.pdfY : null
       });
 
     if (insertError) throw insertError;
@@ -671,6 +812,8 @@ btnEnviar.addEventListener('click', async () => {
     document.getElementById('aluno-nascimento').value = '';
     fileInput.value = '';
     camposPdf = [];
+    assinaturaPos = null;
+    modoMarcarAssinatura = false;
     document.getElementById('campos-lista').innerHTML = '';
     document.getElementById('pdf-editor-card').style.display = 'none';
     carregarDocumentos();
